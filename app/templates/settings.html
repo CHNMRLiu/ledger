@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 基本设置 -->
+<div class="card">
+    <div class="card-header">
+        <h3>⚙️ 基本设置</h3>
+    </div>
+    <div class="card-body">
+        <form onsubmit="saveSettings(event)">
+            <div class="form-group">
+                <label>系统名称</label>
+                <input type="text" id="app_name" class="form-input"
+                       value="{{ settings.get('app_name', '飞牛台账系统') }}"
+                       placeholder="飞牛台账系统">
+            </div>
+            <div class="form-group">
+                <label>每页显示数量</label>
+                <select id="page_size" class="form-select">
+                    {% for size in [10, 20, 50, 100] %}
+                    <option value="{{ size }}" {{ 'selected' if settings.get('page_size', '20') == size|string }}>
+                        {{ size }} 条
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">保存设置</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- GitHub同步设置 -->
+<div class="card">
+    <div class="card-header">
+        <h3>🔄 GitHub自动同步</h3>
+        <span class="badge" id="syncBadge">{{ '已启用' if settings.get('auto_sync_enabled') == 'true' else '未启用' }}</span>
+    </div>
+    <div class="card-body">
+        <form onsubmit="saveSyncSettings(event)">
+            <div class="form-group">
+                <label>GitHub仓库地址</label>
+                <input type="text" id="github_repo" class="form-input"
+                       value="{{ settings.get('github_repo', '') }}"
+                       placeholder="https://github.com/username/repo.git">
+                <small class="form-help">填写仓库的HTTPS克隆地址</small>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>自动同步</label>
+                    <select id="auto_sync_enabled" class="form-select" onchange="toggleSyncInterval()">
+                        <option value="false" {{ 'selected' if settings.get('auto_sync_enabled') != 'true' }}>关闭</option>
+                        <option value="true" {{ 'selected' if settings.get('auto_sync_enabled') == 'true' }}>开启</option>
+                    </select>
+                </div>
+                <div class="form-group" id="syncIntervalGroup"
+                     style="display:{{ 'block' if settings.get('auto_sync_enabled') == 'true' else 'none' }}">
+                    <label>同步间隔</label>
+                    <select id="auto_sync_interval" class="form-select">
+                        {% for val, label in [(300,'5分钟'),(900,'15分钟'),(1800,'30分钟'),(3600,'1小时'),(21600,'6小时'),(86400,'1天')] %}
+                        <option value="{{ val }}" {{ 'selected' if settings.get('auto_sync_interval','3600') == val|string }}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">保存同步设置</button>
+                <button type="button" class="btn btn-secondary" onclick="triggerSync()">
+                    🔄 立即同步
+                </button>
+            </div>
+        </form>
+        <div class="sync-info">
+            <p>上次同步时间：<strong id="lastSyncTime">{{ settings.get('last_sync_time', '从未同步') }}</strong></p>
+        </div>
+    </div>
+</div>
+
+<!-- 数据管理 -->
+<div class="card">
+    <div class="card-header">
+        <h3>💾 数据管理</h3>
+    </div>
+    <div class="card-body">
+        <div class="data-actions">
+            <button class="btn btn-primary" onclick="exportData()">
+                📤 导出全部数据（JSON）
+            </button>
+            <label class="btn btn-secondary import-btn">
+                📥 导入数据（JSON）
+                <input type="file" id="importFile" accept=".json" onchange="importData(this)" style="display:none">
+            </label>
+            <button class="btn btn-success" onclick="triggerBackup()">
+                💾 立即备份数据库
+            </button>
+        </div>
+        <div class="form-help" style="margin-top:12px;">
+            <p>⚠️ 导入会追加数据，不会覆盖已有记录。建议先备份再导入。</p>
+            <p>🔄 系统每6小时自动备份数据库，保留最近30份。</p>
+        </div>
+    </div>
+</div>
+
+<!-- 备份管理 -->
+<div class="card">
+    <div class="card-header">
+        <h3>🗂️ 备份管理</h3>
+        <button class="btn btn-sm btn-secondary" onclick="loadBackups()">🔄 刷新</button>
+    </div>
+    <div class="card-body">
+        <div id="backupList">
+            <p class="text-muted">加载中...</p>
+        </div>
+    </div>
+</div>
+
+<!-- 系统信息 -->
+<div class="card">
+    <div class="card-header">
+        <h3>ℹ️ 系统信息</h3>
+    </div>
+    <div class="card-body">
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label">系统版本</span>
+                <span class="info-value">v{{ version }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">运行环境</span>
+                <span class="info-value">Docker / 飞牛NAS</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">数据库</span>
+                <span class="info-value">SQLite (WAL模式)</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">热更新</span>
+                <span class="info-value">✅ 已启用</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSyncInterval() {
+    const enabled = document.getElementById('auto_sync_enabled').value;
+    document.getElementById('syncIntervalGroup').style.display = enabled === 'true' ? 'block' : 'none';
+}
+
+function saveSettings(e) {
+    e.preventDefault();
+    const data = {
+        app_name: document.getElementById('app_name').value.trim() || '飞牛台账系统',
+        page_size: document.getElementById('page_size').value,
+    };
+
+    fetch('/api/settings', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            showToast('设置已保存', 'success');
+            // 如果修改了系统名称，更新页面标题
+            document.querySelector('.logo-text').textContent = data.app_name;
+        } else {
+            showToast(res.error || '保存失败', 'error');
+        }
+    })
+    .catch(err => showToast('网络错误', 'error'));
+}
+
+function saveSyncSettings(e) {
+    e.preventDefault();
+    const data = {
+        github_repo: document.getElementById('github_repo').value.trim(),
+        auto_sync_enabled: document.getElementById('auto_sync_enabled').value,
+        auto_sync_interval: document.getElementById('auto_sync_interval').value,
+    };
+
+    fetch('/api/settings', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            showToast('同步设置已保存', 'success');
+            document.getElementById('syncBadge').textContent =
+                data.auto_sync_enabled === 'true' ? '已启用' : '未启用';
+        } else {
+            showToast(res.error || '保存失败', 'error');
+        }
+    })
+    .catch(err => showToast('网络错误', 'error'));
+}
+
+function triggerSync() {
+    showToast('正在同步...', 'info');
+    fetch('/api/sync', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                showToast('同步完成', 'success');
+                if (res.output) console.log('Sync output:', res.output);
+            } else {
+                showToast(res.error || '同步失败', 'error');
+            }
+        })
+        .catch(err => showToast('网络错误', 'error'));
+}
+
+function exportData() {
+    window.location.href = '/api/export';
+}
+
+function importData(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!data.records || !Array.isArray(data.records)) {
+                showToast('无效的数据格式', 'error');
+                return;
+            }
+
+            showConfirm('导入确认', `即将导入 ${data.records.length} 条记录，确定继续？`, function() {
+                fetch('/api/import', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        showToast(res.message, 'success');
+                    } else {
+                        showToast(res.error || '导入失败', 'error');
+                    }
+                })
+                .catch(err => showToast('网络错误', 'error'));
+            });
+        } catch (err) {
+            showToast('文件格式错误', 'error');
+        }
+    };
+    reader.readAsText(file);
+    input.value = ''; // 重置文件选择
+}
+
+// ========== 备份管理 ==========
+
+// 页面加载时获取备份列表
+document.addEventListener('DOMContentLoaded', function() {
+    loadBackups();
+});
+
+function triggerBackup() {
+    showToast('正在备份...', 'info');
+    fetch('/api/backup', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                showToast('备份完成', 'success');
+                loadBackups();
+            } else {
+                showToast(res.error || '备份失败', 'error');
+            }
+        })
+        .catch(err => showToast('网络错误', 'error'));
+}
+
+function loadBackups() {
+    fetch('/api/backups')
+        .then(r => r.json())
+        .then(res => {
+            const container = document.getElementById('backupList');
+            if (res.success && res.data.length > 0) {
+                container.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>备份文件</th>
+                                    <th>大小</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${res.data.map(b => `
+                                    <tr>
+                                        <td><code>${b.filename}</code></td>
+                                        <td>${b.size} KB</td>
+                                        <td class="text-muted">${b.created}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-warning" onclick="restoreBackup('${b.filename}')">
+                                                🔄 恢复
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = '<p class="text-muted">暂无备份记录</p>';
+            }
+        })
+        .catch(err => {
+            document.getElementById('backupList').innerHTML = '<p class="text-muted">加载失败</p>';
+        });
+}
+
+function restoreBackup(filename) {
+    showConfirm('恢复确认', `确定要从备份 ${filename} 恢复数据库吗？当前数据会先被自动备份。`, function() {
+        fetch('/api/backup/restore', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ filename: filename })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                showToast('恢复成功，页面即将刷新', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(res.error || '恢复失败', 'error');
+            }
+        })
+        .catch(err => showToast('网络错误', 'error'));
+    });
+}
+</script>
+{% endblock %}

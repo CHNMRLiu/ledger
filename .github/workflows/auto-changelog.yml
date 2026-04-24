@@ -1,0 +1,72 @@
+# ============================================================
+# GitHub Actions - 自动更新日志
+# 功能：每次代码推送时自动生成/更新 CHANGELOG.md
+# ============================================================
+
+name: Auto Changelog
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - '.gitignore'
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: write
+
+jobs:
+  changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install conventional-changelog-cli
+        run: npm install -g conventional-changelog-cli
+
+      - name: Generate changelog
+        run: |
+          # 生成完整更新日志
+          conventional-changelog -p angular -i CHANGELOG.md -s -r 0
+          
+          # 如果文件为空，创建初始内容
+          if [ ! -s CHANGELOG.md ]; then
+            echo "# 📋 更新日志" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "所有重要更改都将记录在此文件中。" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "## [1.0.0] - $(date '+%Y-%m-%d')" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "### ✨ 新增" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "- 台账记录CRUD功能" >> CHANGELOG.md
+            echo "- 分类管理" >> CHANGELOG.md
+            echo "- 数据统计仪表盘" >> CHANGELOG.md
+            echo "- GitHub自动同步" >> CHANGELOG.md
+            echo "- 数据导入导出" >> CHANGELOG.md
+            echo "- 热更新支持" >> CHANGELOG.md
+          fi
+
+      - name: Commit changelog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if [ -n "$(git status --porcelain CHANGELOG.md)" ]; then
+            git add CHANGELOG.md
+            git commit -m "docs: 更新CHANGELOG.md [skip ci]" || true
+            git push
+          fi

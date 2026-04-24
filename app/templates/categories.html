@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="toolbar">
+    <div class="toolbar-left">
+        <h3>分类管理</h3>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn btn-success" onclick="showAddCategory()">➕ 新增分类</button>
+    </div>
+</div>
+
+<!-- 新增/编辑分类表单 -->
+<div class="card" id="categoryForm" style="display:none;">
+    <div class="card-header">
+        <h3 id="formTitle">新增分类</h3>
+        <button class="btn btn-sm btn-secondary" onclick="hideForm()">取消</button>
+    </div>
+    <div class="card-body">
+        <form onsubmit="saveCategory(event)">
+            <input type="hidden" id="editCategoryId">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>名称 <span class="required">*</span></label>
+                    <input type="text" id="catName" class="form-input" required placeholder="分类名称">
+                </div>
+                <div class="form-group">
+                    <label>图标（Emoji）</label>
+                    <input type="text" id="catIcon" class="form-input" value="📁" placeholder="📁">
+                </div>
+                <div class="form-group">
+                    <label>颜色</label>
+                    <input type="color" id="catColor" class="form-input form-color" value="#4A90D9">
+                </div>
+                <div class="form-group">
+                    <label>排序</label>
+                    <input type="number" id="catSort" class="form-input" value="0" min="0">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 分类列表 -->
+<div class="card">
+    <div class="card-body">
+        {% if categories %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>排序</th>
+                        <th>图标</th>
+                        <th>名称</th>
+                        <th>颜色</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cat in categories %}
+                    <tr>
+                        <td>{{ cat.sort_order }}</td>
+                        <td class="text-lg">{{ cat.icon }}</td>
+                        <td><strong>{{ cat.name }}</strong></td>
+                        <td>
+                            <span class="color-preview" style="background:{{ cat.color }}"></span>
+                            {{ cat.color }}
+                        </td>
+                        <td class="text-muted">{{ cat.created_at }}</td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="btn btn-sm btn-primary"
+                                        onclick="editCategory({{ cat.id }}, '{{ cat.name }}', '{{ cat.icon }}', '{{ cat.color }}', {{ cat.sort_order }})">
+                                    ✏️
+                                </button>
+                                <button class="btn btn-sm btn-danger"
+                                        onclick="deleteCategory({{ cat.id }}, '{{ cat.name }}')">
+                                    🗑️
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>暂无分类，点击上方按钮创建第一个分类</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showAddCategory() {
+    document.getElementById('editCategoryId').value = '';
+    document.getElementById('catName').value = '';
+    document.getElementById('catIcon').value = '📁';
+    document.getElementById('catColor').value = '#4A90D9';
+    document.getElementById('catSort').value = '0';
+    document.getElementById('formTitle').textContent = '新增分类';
+    document.getElementById('categoryForm').style.display = 'block';
+    document.getElementById('catName').focus();
+}
+
+function editCategory(id, name, icon, color, sort) {
+    document.getElementById('editCategoryId').value = id;
+    document.getElementById('catName').value = name;
+    document.getElementById('catIcon').value = icon;
+    document.getElementById('catColor').value = color;
+    document.getElementById('catSort').value = sort;
+    document.getElementById('formTitle').textContent = '编辑分类';
+    document.getElementById('categoryForm').style.display = 'block';
+    document.getElementById('catName').focus();
+}
+
+function hideForm() {
+    document.getElementById('categoryForm').style.display = 'none';
+}
+
+function saveCategory(e) {
+    e.preventDefault();
+    const id = document.getElementById('editCategoryId').value;
+    const data = {
+        name: document.getElementById('catName').value.trim(),
+        icon: document.getElementById('catIcon').value.trim() || '📁',
+        color: document.getElementById('catColor').value,
+        sort_order: parseInt(document.getElementById('catSort').value) || 0,
+    };
+
+    if (!data.name) {
+        showToast('分类名称不能为空', 'error');
+        return;
+    }
+
+    const url = id ? `/api/categories/${id}` : '/api/categories';
+    const method = id ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            showToast(id ? '更新成功' : '创建成功', 'success');
+            location.reload();
+        } else {
+            showToast(res.error || '操作失败', 'error');
+        }
+    })
+    .catch(err => showToast('网络错误', 'error'));
+}
+
+function deleteCategory(id, name) {
+    showConfirm('删除分类', `确定要删除分类"${name}"吗？该分类下的记录不会被删除，但会失去分类关联。`, function() {
+        fetch(`/api/categories/${id}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    showToast(res.message || '删除成功', 'success');
+                    location.reload();
+                } else {
+                    showToast(res.error || '删除失败', 'error');
+                }
+            })
+            .catch(err => showToast('网络错误', 'error'));
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ app_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
+</head>
+<body>
+    <!-- 侧边栏导航 -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span class="logo-icon">📒</span>
+            <span class="logo-text">{{ app_name }}</span>
+            <button class="sidebar-toggle" id="sidebarToggle" title="收起菜单">☰</button>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/dashboard" class="nav-item {% if page_title == '仪表盘' %}active{% endif %}">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">仪表盘</span>
+            </a>
+            <a href="/records" class="nav-item {% if page_title == '台账记录' %}active{% endif %}">
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">台账记录</span>
+            </a>
+            <a href="/records/new" class="nav-item {% if page_title == '新增记录' %}active{% endif %}">
+                <span class="nav-icon">➕</span>
+                <span class="nav-text">新增记录</span>
+            </a>
+            <a href="/categories" class="nav-item {% if page_title == '分类管理' %}active{% endif %}">
+                <span class="nav-icon">🏷️</span>
+                <span class="nav-text">分类管理</span>
+            </a>
+            <a href="/settings" class="nav-item {% if page_title == '系统设置' %}active{% endif %}">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-text">系统设置</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <span class="version-tag">v{{ version }}</span>
+        </div>
+    </aside>
+
+    <!-- 主内容区域 -->
+    <main class="main-content" id="mainContent">
+        <!-- 顶部栏 -->
+        <header class="top-bar">
+            <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+            <h1 class="page-title">{{ page_title }}</h1>
+            <div class="top-bar-actions">
+                <span class="sync-status" id="syncStatus" title="同步状态">🟢 在线</span>
+            </div>
+        </header>
+
+        <!-- 页面内容区 -->
+        <div class="content-area">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- 全局Toast通知容器 -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- 全局确认对话框 -->
+    <div class="modal-overlay" id="confirmModal" style="display:none;">
+        <div class="modal confirm-modal">
+            <div class="modal-header">
+                <h3 id="confirmTitle">确认操作</h3>
+                <button class="modal-close" onclick="closeConfirm()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">确定要执行此操作吗？</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeConfirm()">取消</button>
+                <button class="btn btn-danger" id="confirmBtn" onclick="doConfirm()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

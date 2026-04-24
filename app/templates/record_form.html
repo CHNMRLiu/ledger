@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h3>{{ '编辑记录' if record else '新增记录' }}</h3>
+        <a href="/records" class="btn btn-secondary">← 返回列表</a>
+    </div>
+    <div class="card-body">
+        <form id="recordForm" onsubmit="submitRecord(event)">
+            <div class="form-group">
+                <label for="title">标题 <span class="required">*</span></label>
+                <input type="text" id="title" name="title" class="form-input"
+                       value="{{ record.title if record else '' }}" required
+                       placeholder="输入台账记录标题...">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="category_id">分类</label>
+                    <select id="category_id" name="category_id" class="form-select">
+                        <option value="">无分类</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}"
+                            {{ 'selected' if record and record.category_id == cat.id }}>
+                            {{ cat.icon }} {{ cat.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="status">状态</label>
+                    <select id="status" name="status" class="form-select">
+                        {% for s in ['待处理', '进行中', '已完成', '已取消'] %}
+                        <option value="{{ s }}" {{ 'selected' if record and record.status == s }}>
+                            {{ s }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="priority">优先级</label>
+                    <select id="priority" name="priority" class="form-select">
+                        {% for p in ['低', '普通', '重要', '紧急'] %}
+                        <option value="{{ p }}" {{ 'selected' if record and record.priority == p }}>
+                            {{ p }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="amount">金额（可选）</label>
+                    <input type="number" id="amount" name="amount" class="form-input"
+                           step="0.01" min="0"
+                           value="{{ record.amount if record and record.amount else '' }}"
+                           placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label for="record_date">记录日期</label>
+                    <input type="date" id="record_date" name="record_date" class="form-input"
+                           value="{{ record.record_date if record and record.record_date else '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="due_date">截止日期（可选）</label>
+                    <input type="date" id="due_date" name="due_date" class="form-input"
+                           value="{{ record.due_date if record and record.due_date else '' }}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="tags">标签（逗号分隔）</label>
+                <input type="text" id="tags" name="tags" class="form-input"
+                       value="{{ record.tags|join(', ') if record and record.tags else '' }}"
+                       placeholder="标签1, 标签2, 标签3">
+            </div>
+
+            <div class="form-group">
+                <label for="description">描述</label>
+                <textarea id="description" name="description" class="form-input" rows="6"
+                          placeholder="输入详细描述...">{{ record.description if record else '' }}</textarea>
+            </div>
+
+            <div class="form-actions">
+                <a href="/records" class="btn btn-secondary">取消</a>
+                <button type="submit" class="btn btn-primary" id="submitBtn">
+                    {{ '保存修改' if record else '创建记录' }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function submitRecord(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = '保存中...';
+
+    const formData = {
+        title: document.getElementById('title').value.trim(),
+        category_id: document.getElementById('category_id').value || null,
+        status: document.getElementById('status').value,
+        priority: document.getElementById('priority').value,
+        amount: parseFloat(document.getElementById('amount').value) || 0,
+        record_date: document.getElementById('record_date').value || null,
+        due_date: document.getElementById('due_date').value || null,
+        description: document.getElementById('description').value.trim(),
+        tags: document.getElementById('tags').value
+            .split(/[,，]/)
+            .map(t => t.trim())
+            .filter(t => t),
+    };
+
+    if (!formData.title) {
+        showToast('标题不能为空', 'error');
+        btn.disabled = false;
+        btn.textContent = '{{ "保存修改" if record else "创建记录" }}';
+        return;
+    }
+
+    const isEdit = {{ 'true' if record else 'false' }};
+    const url = isEdit ? '/api/records/{{ record.id if record else "" }}' : '/api/records';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(formData)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            showToast(isEdit ? '修改成功' : '创建成功', 'success');
+            setTimeout(() => window.location.href = '/records', 500);
+        } else {
+            showToast(res.error || '操作失败', 'error');
+            btn.disabled = false;
+            btn.textContent = '{{ "保存修改" if record else "创建记录" }}';
+        }
+    })
+    .catch(err => {
+        showToast('网络错误', 'error');
+        btn.disabled = false;
+        btn.textContent = '{{ "保存修改" if record else "创建记录" }}';
+    });
+}
+</script>
+{% endblock %}

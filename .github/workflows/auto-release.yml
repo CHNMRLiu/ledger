@@ -1,0 +1,78 @@
+# ============================================================
+# GitHub Actions - 自动创建Release
+# 触发条件：推送tag（v*）时自动创建Release并附带更新日志
+# ============================================================
+
+name: Auto Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          # 从CHANGELOG.md提取当前版本的更新内容
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          
+          # 尝试从CHANGELOG中提取对应版本的内容
+          if [ -f CHANGELOG.md ]; then
+            # 提取从当前版本标题到下一个版本标题之间的内容
+            NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} /^## \[/{if(found) exit} found{print}" CHANGELOG.md)
+          fi
+          
+          # 如果CHANGELOG中没有对应版本，生成基础release notes
+          if [ -z "$NOTES" ]; then
+            NOTES="## 飞牛NAS台账系统 v${VERSION}
+
+          ### 📦 Docker镜像
+
+          \`\`\`bash
+          docker pull ghcr.io/chnmrlieu/ledger:${VERSION}
+          \`\`\`
+
+          ### 🚀 快速部署
+
+          \`\`\`bash
+          git clone https://github.com/CHNMRLiu/ledger.git
+          cd ledger
+          git checkout v${VERSION}
+          mkdir -p /vol1/docker/flybook-data/{db,logs,backups}
+          docker-compose up -d
+          \`\`\`"
+          fi
+          
+          # 写入多行输出
+          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "v${{ steps.version.outputs.VERSION }}"
+          body: ${{ steps.notes.outputs.NOTES }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

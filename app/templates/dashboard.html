@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="stats-grid">
+    <div class="stat-card stat-primary">
+        <div class="stat-icon">📋</div>
+        <div class="stat-info">
+            <div class="stat-value">{{ stats.total_records }}</div>
+            <div class="stat-label">总记录数</div>
+        </div>
+    </div>
+    <div class="stat-card stat-success">
+        <div class="stat-icon">✅</div>
+        <div class="stat-info">
+            <div class="stat-value">{{ stats.by_status.get('已完成', 0) }}</div>
+            <div class="stat-label">已完成</div>
+        </div>
+    </div>
+    <div class="stat-card stat-warning">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-info">
+            <div class="stat-value">{{ stats.by_status.get('待处理', 0) }}</div>
+            <div class="stat-label">待处理</div>
+        </div>
+    </div>
+    <div class="stat-card stat-info">
+        <div class="stat-icon">📅</div>
+        <div class="stat-info">
+            <div class="stat-value">{{ stats.today_count }}</div>
+            <div class="stat-label">今日新增</div>
+        </div>
+    </div>
+</div>
+
+<!-- 金额统计（仅当有金额数据时显示） -->
+{% if stats.total_amount > 0 %}
+<div class="stats-grid">
+    <div class="stat-card stat-amount">
+        <div class="stat-icon">💰</div>
+        <div class="stat-info">
+            <div class="stat-value">¥{{ "%.2f"|format(stats.total_amount) }}</div>
+            <div class="stat-label">总金额</div>
+        </div>
+    </div>
+    <div class="stat-card stat-amount">
+        <div class="stat-icon">📊</div>
+        <div class="stat-info">
+            <div class="stat-value">¥{{ "%.2f"|format(stats.avg_amount) }}</div>
+            <div class="stat-label">平均金额</div>
+        </div>
+    </div>
+    <div class="stat-card stat-info">
+        <div class="stat-icon">📈</div>
+        <div class="stat-info">
+            <div class="stat-value">{{ stats.week_count }}</div>
+            <div class="stat-label">本周新增</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 分类统计 -->
+<div class="content-grid">
+    <div class="card">
+        <div class="card-header">
+            <h3>📂 分类统计</h3>
+        </div>
+        <div class="card-body">
+            {% if stats.by_category %}
+            <div class="category-stats">
+                {% for cat in stats.by_category %}
+                <div class="category-bar">
+                    <div class="category-bar-label">
+                        <span>{{ cat.icon }} {{ cat.name }}</span>
+                        <span class="category-bar-count">{{ cat.count }}条</span>
+                    </div>
+                    <div class="category-bar-track">
+                        <div class="category-bar-fill"
+                             style="width: {{ (cat.count / stats.total_records * 100) if stats.total_records > 0 else 0 }}%;
+                                    background-color: {{ cat.color }};">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>暂无分类数据</p>
+                <a href="/categories" class="btn btn-primary btn-sm">创建分类</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3>📊 状态分布</h3>
+        </div>
+        <div class="card-body">
+            {% if stats.by_status %}
+            <div class="status-list">
+                {% for status, count in stats.by_status.items() %}
+                <div class="status-item">
+                    <span class="status-badge status-{{ status }}">{{ status }}</span>
+                    <span class="status-count">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>暂无记录数据</p>
+                <a href="/records/new" class="btn btn-primary btn-sm">创建记录</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 最近操作日志 -->
+<div class="card">
+    <div class="card-header">
+        <h3>📝 最近操作</h3>
+        <a href="/api/logs" class="btn btn-sm btn-secondary" target="_blank">查看全部</a>
+    </div>
+    <div class="card-body">
+        {% if stats.recent_logs %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>操作</th>
+                        <th>记录</th>
+                        <th>详情</th>
+                        <th>时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in stats.recent_logs %}
+                    <tr>
+                        <td><span class="badge badge-{{ log.action }}">{{ log.action }}</span></td>
+                        <td>{{ log.record_title or '-' }}</td>
+                        <td class="text-muted">{{ log.detail }}</td>
+                        <td class="text-muted text-sm">{{ log.created_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>暂无操作记录</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 快捷操作 -->
+<div class="quick-actions">
+    <a href="/records/new" class="quick-action-btn">
+        <span class="quick-action-icon">➕</span>
+        <span>新增记录</span>
+    </a>
+    <a href="/records" class="quick-action-btn">
+        <span class="quick-action-icon">📋</span>
+        <span>查看台账</span>
+    </a>
+    <a href="/categories" class="quick-action-btn">
+        <span class="quick-action-icon">🏷️</span>
+        <span>管理分类</span>
+    </a>
+    <button class="quick-action-btn" onclick="exportData()">
+        <span class="quick-action-icon">📤</span>
+        <span>导出数据</span>
+    </button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function exportData() {
+    window.location.href = '/api/export';
+}
+</script>
+{% endblock %}

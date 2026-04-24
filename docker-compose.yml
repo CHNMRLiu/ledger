@@ -1,0 +1,54 @@
+# ============================================================
+# 飞牛NAS台账系统 - Docker Compose 配置
+# 适配飞牛fnOS Docker部署规范
+#
+# ⚠️ 数据安全设计：
+#   数据库、日志、备份存储在【独立目录】/vol1/docker/flybook-data/
+#   与代码目录完全隔离，git pull/容器重建 绝不影响数据
+#
+# 使用方式：
+#   1. 克隆代码到 /vol1/docker/flybook-ledger
+#   2. 创建数据目录: mkdir -p /vol1/docker/flybook-data/{db,logs,backups}
+#   3. docker-compose up -d
+# ============================================================
+
+version: '3.8'
+
+services:
+  flybook-ledger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flybook-ledger
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # ========== 核心数据（独立目录，绝对安全） ==========
+      # 数据库文件 → /vol1/docker/flybook-data/db/
+      - /vol1/docker/flybook-data/db:/app/data
+      # 运行日志 → /vol1/docker/flybook-data/logs/
+      - /vol1/docker/flybook-data/logs:/app/logs
+      # 数据备份 → /vol1/docker/flybook-data/backups/
+      - /vol1/docker/flybook-data/backups:/app/backups
+
+      # ========== 应用代码（热更新） ==========
+      - ./app:/app/app
+      - ./sync.sh:/app/sync.sh
+    environment:
+      - TZ=Asia/Shanghai
+      - FLASK_DEBUG=true
+      - PORT=5000
+      - DB_PATH=/app/data/ledger.db
+      - BACKUP_DIR=/app/backups
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

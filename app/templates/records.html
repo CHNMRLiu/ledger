@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 筛选工具栏 -->
+<div class="toolbar">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <input type="text" id="searchInput" class="form-input" placeholder="搜索标题或描述..."
+                   value="{{ request.args.get('search', '') }}">
+            <button class="btn btn-primary" onclick="loadRecords()">🔍 搜索</button>
+        </div>
+    </div>
+    <div class="toolbar-right">
+        <select id="filterCategory" class="form-select" onchange="loadRecords()">
+            <option value="">全部分类</option>
+            {% for cat in categories %}
+            <option value="{{ cat.id }}" {{ 'selected' if request.args.get('category_id') == cat.id|string }}>
+                {{ cat.icon }} {{ cat.name }}
+            </option>
+            {% endfor %}
+        </select>
+        <select id="filterStatus" class="form-select" onchange="loadRecords()">
+            <option value="">全部状态</option>
+            <option value="待处理">待处理</option>
+            <option value="进行中">进行中</option>
+            <option value="已完成">已完成</option>
+            <option value="已取消">已取消</option>
+        </select>
+        <select id="filterPriority" class="form-select" onchange="loadRecords()">
+            <option value="">全部优先级</option>
+            <option value="紧急">🔴 紧急</option>
+            <option value="重要">🟠 重要</option>
+            <option value="普通">🟡 普通</option>
+            <option value="低">🟢 低</option>
+        </select>
+        <a href="/records/new" class="btn btn-success">➕ 新增</a>
+    </div>
+</div>
+
+<!-- 台账列表 -->
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table" id="recordsTable">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="title">标题</th>
+                        <th>分类</th>
+                        <th>状态</th>
+                        <th class="sortable" data-sort="priority">优先级</th>
+                        <th class="sortable" data-sort="amount">金额</th>
+                        <th class="sortable" data-sort="record_date">日期</th>
+                        <th class="sortable" data-sort="created_at">创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="recordsBody">
+                    <tr>
+                        <td colspan="8" class="text-center text-muted">加载中...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 分页 -->
+<div class="pagination" id="pagination"></div>
+
+<!-- 行内编辑模态框 -->
+<div class="modal-overlay" id="editModal" style="display:none;">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3>快速编辑</h3>
+            <button class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="quickEditForm">
+                <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label>标题 <span class="required">*</span></label>
+                    <input type="text" id="editTitle" class="form-input" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>分类</label>
+                        <select id="editCategory" class="form-select">
+                            <option value="">无分类</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.icon }} {{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>状态</label>
+                        <select id="editStatus" class="form-select">
+                            <option value="待处理">待处理</option>
+                            <option value="进行中">进行中</option>
+                            <option value="已完成">已完成</option>
+                            <option value="已取消">已取消</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>优先级</label>
+                        <select id="editPriority" class="form-select">
+                            <option value="低">低</option>
+                            <option value="普通">普通</option>
+                            <option value="重要">重要</option>
+                            <option value="紧急">紧急</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>金额</label>
+                        <input type="number" id="editAmount" class="form-input" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label>记录日期</label>
+                        <input type="date" id="editDate" class="form-input">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="editDescription" class="form-input" rows="3"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveQuickEdit()">保存</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+let currentSort = 'created_at';
+let currentOrder = 'desc';
+
+// 页面加载时获取记录
+document.addEventListener('DOMContentLoaded', function() {
+    loadRecords();
+    // 绑定排序点击事件
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', function() {
+            const field = this.dataset.sort;
+            if (currentSort === field) {
+                currentOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+            } else {
+                currentSort = field;
+                currentOrder = 'desc';
+            }
+            loadRecords();
+        });
+    });
+    // 搜索框回车触发搜索
+    document.getElementById('searchInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') loadRecords();
+    });
+});
+
+// 加载台账记录
+function loadRecords(page) {
+    currentPage = page || 1;
+    const params = new URLSearchParams({
+        page: currentPage,
+        per_page: 20,
+        sort_by: currentSort,
+        sort_order: currentOrder,
+    });
+
+    const search = document.getElementById('searchInput').value.trim();
+    const category = document.getElementById('filterCategory').value;
+    const status = document.getElementById('filterStatus').value;
+    const priority = document.getElementById('filterPriority').value;
+
+    if (search) params.append('search', search);
+    if (category) params.append('category_id', category);
+    if (status) params.append('status', status);
+    if (priority) params.append('priority', priority);
+
+    fetch(`/api/records?${params}`)
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                renderRecords(res.data);
+                renderPagination(res.pagination);
+            } else {
+                showToast(res.error || '加载失败', 'error');
+            }
+        })
+        .catch(err => showToast('网络错误', 'error'));
+}
+
+// 渲染记录表格
+function renderRecords(records) {
+    const tbody = document.getElementById('recordsBody');
+    if (!records.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">暂无记录</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = records.map(r => `
+        <tr>
+            <td>
+                <a href="/records/${r.id}/edit" class="record-title">${escapeHtml(r.title)}</a>
+                ${r.tags && r.tags.length ? r.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('') : ''}
+            </td>
+            <td>
+                ${r.category_name
+                    ? `<span class="category-tag" style="background:${r.category_color}20;color:${r.category_color}">${r.category_icon} ${r.category_name}</span>`
+                    : '<span class="text-muted">-</span>'}
+            </td>
+            <td><span class="status-badge status-${r.status}">${r.status}</span></td>
+            <td><span class="priority-badge priority-${r.priority}">${r.priority}</span></td>
+            <td class="text-right">${r.amount > 0 ? '¥' + r.amount.toFixed(2) : '-'}</td>
+            <td class="text-muted">${r.record_date || '-'}</td>
+            <td class="text-muted text-sm">${formatDate(r.created_at)}</td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn btn-sm btn-primary" onclick="quickEdit(${r.id})" title="快速编辑">✏️</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteRecord(${r.id}, '${escapeHtml(r.title)}')" title="删除">🗑️</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 渲染分页
+function renderPagination(pg) {
+    const container = document.getElementById('pagination');
+    if (pg.pages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    if (pg.page > 1) {
+        html += `<button class="btn btn-sm" onclick="loadRecords(${pg.page - 1})">上一页</button>`;
+    }
+
+    const start = Math.max(1, pg.page - 2);
+    const end = Math.min(pg.pages, pg.page + 2);
+
+    for (let i = start; i <= end; i++) {
+        html += `<button class="btn btn-sm ${i === pg.page ? 'btn-primary' : ''}" onclick="loadRecords(${i})">${i}</button>`;
+    }
+
+    if (pg.page < pg.pages) {
+        html += `<button class="btn btn-sm" onclick="loadRecords(${pg.page + 1})">下一页</button>`;
+    }
+
+    html += `<span class="pagination-info">共 ${pg.total} 条，${pg.pages} 页</span>`;
+    container.innerHTML = html;
+}
+
+// 快速编辑
+function quickEdit(id) {
+    fetch(`/api/records/${id}`)
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                const r = res.data;
+                document.getElementById('editId').value = r.id;
+                document.getElementById('editTitle').value = r.title;
+                document.getElementById('editCategory').value = r.category_id || '';
+                document.getElementById('editStatus').value = r.status;
+                document.getElementById('editPriority').value = r.priority;
+                document.getElementById('editAmount').value = r.amount || '';
+                document.getElementById('editDate').value = r.record_date || '';
+                document.getElementById('editDescription').value = r.description || '';
+                document.getElementById('editModal').style.display = 'flex';
+            }
+        });
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+function saveQuickEdit() {
+    const id = document.getElementById('editId').value;
+    const data = {
+        title: document.getElementById('editTitle').value.trim(),
+        category_id: document.getElementById('editCategory').value || null,
+        status: document.getElementById('editStatus').value,
+        priority: document.getElementById('editPriority').value,
+        amount: parseFloat(document.getElementById('editAmount').value) || 0,
+        record_date: document.getElementById('editDate').value || null,
+        description: document.getElementById('editDescription').value.trim(),
+    };
+
+    if (!data.title) {
+        showToast('标题不能为空', 'error');
+        return;
+    }
+
+    fetch(`/api/records/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            showToast('保存成功', 'success');
+            closeEditModal();
+            loadRecords(currentPage);
+        } else {
+            showToast(res.error || '保存失败', 'error');
+        }
+    })
+    .catch(err => showToast('网络错误', 'error'));
+}
+
+// 删除记录
+function deleteRecord(id, title) {
+    showConfirm('删除确认', `确定要删除记录"${title}"吗？此操作不可恢复。`, function() {
+        fetch(`/api/records/${id}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    showToast('删除成功', 'success');
+                    loadRecords(currentPage);
+                } else {
+                    showToast(res.error || '删除失败', 'error');
+                }
+            })
+            .catch(err => showToast('网络错误', 'error'));
+    });
+}
+
+// 工具函数
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    return dateStr.substring(0, 16);
+}
+</script>
+{% endblock %}
